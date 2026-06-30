@@ -29,10 +29,12 @@ try {
     Get-PnpDevice -Class Keyboard -PresentOnly -ErrorAction SilentlyContinue | Enable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue
 }
 
-# --- 2) Clean up startup entry / running process / files ---
+# --- 2) Remove the scheduled task, running process, startup entry, and files ---
+Unregister-ScheduledTask -TaskName 'KeyLock' -Confirm:$false -ErrorAction SilentlyContinue
+
 $dest    = Join-Path $env:LOCALAPPDATA 'KeyLock'
 $startup = [Environment]::GetFolderPath('Startup')
-Remove-Item (Join-Path $startup 'KeyLock.vbs') -Force
+Remove-Item (Join-Path $startup 'KeyLock.vbs') -Force   # old launcher from earlier versions
 
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
     Where-Object { $_.CommandLine -like '*KeyLock.ps1*' } |
@@ -41,7 +43,7 @@ Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
 Remove-Item $dest -Recurse -Force
 
 Write-Host ''
-Write-Host '  [OK] Uninstalled.' -ForegroundColor Green
-Write-Host '  >>> Please REBOOT once to re-enable the NumLock/CapsLock keys. <<<' -ForegroundColor Yellow
+Write-Host '  [OK] Uninstalled. NumLock/CapsLock keys are free again.' -ForegroundColor Green
+Write-Host '       (CapsLock fully restores after a reboot, or right away on most PCs.)' -ForegroundColor Yellow
 Write-Host ''
 Read-Host '  Press Enter to close'
