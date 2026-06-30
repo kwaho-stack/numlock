@@ -28,9 +28,14 @@ $map = [byte[]](
 )
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout' -Name 'Scancode Map' -Value $map -Type Binary
 
-# --- 2) Make NumLock ON at boot (logon screen + current user) ---
-Set-ItemProperty -Path 'Registry::HKEY_USERS\.DEFAULT\Control Panel\Keyboard' -Name 'InitialKeyboardIndicators' -Value '2'
-Set-ItemProperty -Path 'HKCU:\Control Panel\Keyboard' -Name 'InitialKeyboardIndicators' -Value '2'
+# --- 2) Make NumLock ON at boot for every user hive (2 = NumLock on) ---
+Set-ItemProperty -Path 'HKCU:\Control Panel\Keyboard' -Name 'InitialKeyboardIndicators' -Value '2' -ErrorAction SilentlyContinue
+foreach ($sid in (Get-ChildItem 'Registry::HKEY_USERS' -ErrorAction SilentlyContinue).PSChildName) {
+    $kb = "Registry::HKEY_USERS\$sid\Control Panel\Keyboard"
+    if (Test-Path $kb) {
+        Set-ItemProperty -Path $kb -Name 'InitialKeyboardIndicators' -Value '2' -ErrorAction SilentlyContinue
+    }
+}
 
 # --- 3) Install the helper and a hidden launcher ---
 $dest = Join-Path $env:LOCALAPPDATA 'KeyLock'

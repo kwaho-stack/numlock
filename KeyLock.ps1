@@ -24,6 +24,7 @@ public static class KeyLock
     const uint WM_TIMER       = 0x0113;
     const int  VK_CAPITAL     = 0x14;   // CapsLock
     const int  VK_NUMLOCK     = 0x90;   // NumLock
+    const uint LLKHF_EXTENDED = 0x01;
     const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     const uint KEYEVENTF_KEYUP       = 0x0002;
 
@@ -57,20 +58,59 @@ public static class KeyLock
     [DllImport("user32.dll")]
     static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint min, uint max);
 
+    // Map a numpad scan code to its numeric VK. Returns 0 for non-numpad keys.
+    static byte NumpadVkFromScan(uint scan)
+    {
+        switch (scan)
+        {
+            case 0x47: return 0x67; // 7
+            case 0x48: return 0x68; // 8
+            case 0x49: return 0x69; // 9
+            case 0x4B: return 0x64; // 4
+            case 0x4C: return 0x65; // 5
+            case 0x4D: return 0x66; // 6
+            case 0x4F: return 0x61; // 1
+            case 0x50: return 0x62; // 2
+            case 0x51: return 0x63; // 3
+            case 0x52: return 0x60; // 0
+            case 0x53: return 0x6E; // .
+            default:   return 0;
+        }
+    }
+
     static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0)
         {
             int msg = wParam.ToInt32();
-            if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYUP)
+            bool down = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
+            bool up   = (msg == WM_KEYUP   || msg == WM_SYSKEYUP);
+            if (down || up)
             {
                 KBDLLHOOKSTRUCT kb = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
-                if (kb.vkCode == VK_CAPITAL || kb.vkCode == VK_NUMLOCK)
+
+                // Ignore our own injected events (they carry our signature).
+                if (kb.dwExtraInfo.ToInt64() != SIG)
                 {
-                    // Block every NumLock/CapsLock event that is not our own signed one.
-                    // This also blocks events injected by other software (e.g. Logitech Options).
-                    if (kb.dwExtraInfo.ToInt64() != SIG)
+                    // (1) Lock: block any NumLock/CapsLock event that is not ours
+                    //     (covers real presses and ones injected by other software).
+                    if (kb.vkCode == VK_CAPITAL || kb.vkCode == VK_NUMLOCK)
                         return (IntPtr)1;
+
+                    // (2) Force the numpad to ALWAYS type digits, regardless of the
+                    //     keyboard's own NumLock state (handles firmware-managed NumLock,
+                    //     e.g. Lofree). A numpad key arriving as a navigation key has a
+                    //     numpad scan code and is NOT extended (the real arrow/nav cluster
+                    //     IS extended). Remap it to the matching numpad digit.
+                    if ((kb.flags & LLKHF_EXTENDED) == 0)
+                    {
+                        byte np = NumpadVkFromScan(kb.scanCode);
+                        if (np != 0 && kb.vkCode != np)
+                        {
+                            keybd_event(np, 0, down ? 0u : KEYEVENTF_KEYUP, (UIntPtr)(ulong)SIG);
+                            return (IntPtr)1;
+                        }
+                    }
                 }
             }
         }
