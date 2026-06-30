@@ -18,13 +18,18 @@ public static class KeyLock
 {
     const int  WH_KEYBOARD_LL = 13;
     const int  WM_KEYDOWN     = 0x0100;
+    const int  WM_KEYUP       = 0x0101;
     const int  WM_SYSKEYDOWN  = 0x0104;
+    const int  WM_SYSKEYUP    = 0x0105;
     const uint WM_TIMER       = 0x0113;
     const int  VK_CAPITAL     = 0x14;   // CapsLock
     const int  VK_NUMLOCK     = 0x90;   // NumLock
-    const uint LLKHF_INJECTED = 0x10;
     const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     const uint KEYEVENTF_KEYUP       = 0x0002;
+
+    // Signature we stamp on our own injected presses, so the hook can tell them apart
+    // from anyone else's NumLock/CapsLock events (e.g. Logitech Options injecting keys).
+    const long SIG = 0x4B4C4F4B; // 'KLOK'
 
     delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
     static readonly LowLevelKeyboardProc _proc = HookCallback;  // keep alive (no GC)
@@ -57,13 +62,14 @@ public static class KeyLock
         if (nCode >= 0)
         {
             int msg = wParam.ToInt32();
-            if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
+            if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYUP)
             {
                 KBDLLHOOKSTRUCT kb = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
                 if (kb.vkCode == VK_CAPITAL || kb.vkCode == VK_NUMLOCK)
                 {
-                    // Block only real (non-injected) presses, so our own keybd_event still works.
-                    if ((kb.flags & LLKHF_INJECTED) == 0)
+                    // Block every NumLock/CapsLock event that is not our own signed one.
+                    // This also blocks events injected by other software (e.g. Logitech Options).
+                    if (kb.dwExtraInfo.ToInt64() != SIG)
                         return (IntPtr)1;
                 }
             }
@@ -73,8 +79,9 @@ public static class KeyLock
 
     static void Press(byte vk)
     {
-        keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY, UIntPtr.Zero);
-        keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, UIntPtr.Zero);
+        UIntPtr sig = (UIntPtr)(ulong)SIG;
+        keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY, sig);
+        keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, sig);
     }
 
     public static void EnforceState()
