@@ -1,7 +1,7 @@
 # KeyLock.ps1
-# 넘버락(NumLock)은 항상 켜진 상태, 캡스락(CapsLock)은 항상 꺼진 상태로 고정합니다.
-# 저단계 키보드 후크(WH_KEYBOARD_LL)로 두 키의 입력 자체를 막아 상태가 바뀌지 않게 합니다.
-# 백그라운드에서 조용히 동작하며, 종료 전까지 계속 살아 있습니다.
+# Backup helper: forces NumLock = ON and CapsLock = OFF, and (until the Scancode Map
+# takes effect after reboot) blocks the NumLock/CapsLock keys with a low-level hook.
+# Runs quietly in the background until terminated.
 
 $ErrorActionPreference = 'Stop'
 
@@ -21,7 +21,7 @@ public static class KeyLock
 
     delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-    // 콜백/후크 핸들은 GC가 수거하지 않도록 static 으로 보관
+    // Keep the callback/hook handle alive so the GC does not collect them.
     static readonly LowLevelKeyboardProc _proc = HookCallback;
     static IntPtr _hookID = IntPtr.Zero;
 
@@ -56,7 +56,7 @@ public static class KeyLock
                 KBDLLHOOKSTRUCT kb = (KBDLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(KBDLLHOOKSTRUCT));
                 if (kb.vkCode == VK_CAPITAL || kb.vkCode == VK_NUMLOCK)
                 {
-                    // 키 입력을 삼켜서 토글 자체가 일어나지 않게 한다 -> 상태 고정
+                    // Swallow the keystroke so the toggle never happens -> state stays fixed.
                     return (IntPtr)1;
                 }
             }
@@ -70,11 +70,11 @@ public static class KeyLock
         keybd_event(vk, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, UIntPtr.Zero);
     }
 
-    // NumLock=ON, CapsLock=OFF 가 되도록 한 번 맞춰준다 (후크 설치 전에 호출해야 함)
+    // Make NumLock = ON, CapsLock = OFF (call this before installing the hook).
     public static void EnforceState()
     {
-        if ((GetKeyState(VK_NUMLOCK) & 1) == 0) Press((byte)VK_NUMLOCK); // 꺼져 있으면 켠다
-        if ((GetKeyState(VK_CAPITAL) & 1) == 1) Press((byte)VK_CAPITAL); // 켜져 있으면 끈다
+        if ((GetKeyState(VK_NUMLOCK) & 1) == 0) Press((byte)VK_NUMLOCK); // turn on if off
+        if ((GetKeyState(VK_CAPITAL) & 1) == 1) Press((byte)VK_CAPITAL); // turn off if on
     }
 
     public static void Run()
@@ -82,7 +82,7 @@ public static class KeyLock
         EnforceState();
         _hookID = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(null), 0);
         MSG m;
-        // 전역 저단계 후크는 메시지 펌프가 필요하므로 이 루프가 프로세스를 살려둔다
+        // A global low-level hook needs a message pump; this loop keeps the process alive.
         while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) { }
         UnhookWindowsHookEx(_hookID);
     }
