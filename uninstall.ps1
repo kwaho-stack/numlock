@@ -16,6 +16,19 @@ if (-not $pr.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
 # --- 1) Remove Scancode Map -> re-enable NumLock/CapsLock keys ---
 Remove-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout' -Name 'Scancode Map' -ErrorAction SilentlyContinue
 
+# --- 1b) Apply immediately (no reboot) by restarting the keyboard stack ---
+try {
+    $kbd = Get-PnpDevice -Class Keyboard -PresentOnly -ErrorAction Stop | Where-Object { $_.Status -eq 'OK' }
+    if ($kbd) {
+        $kbd | Disable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 800
+        $kbd | Enable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue
+    }
+} catch {
+} finally {
+    Get-PnpDevice -Class Keyboard -PresentOnly -ErrorAction SilentlyContinue | Enable-PnpDevice -Confirm:$false -ErrorAction SilentlyContinue
+}
+
 # --- 2) Clean up startup entry / running process / files ---
 $dest    = Join-Path $env:LOCALAPPDATA 'KeyLock'
 $startup = [Environment]::GetFolderPath('Startup')
