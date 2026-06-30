@@ -138,15 +138,37 @@ public static class KeyLock
         if ((GetKeyState(VK_SCROLL)  & 1) == 1) Press((byte)VK_SCROLL);  // turn OFF if on
     }
 
+    // (Re)install the hook. Install the new one first, then drop the old one, so the
+    // keyboard is never left unhooked. Keeps the old hook if a new install fails.
+    static void InstallHook()
+    {
+        IntPtr h = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(null), 0);
+        if (h != IntPtr.Zero)
+        {
+            IntPtr old = _hookID;
+            _hookID = h;
+            if (old != IntPtr.Zero && old != h) UnhookWindowsHookEx(old);
+        }
+    }
+
+    static int _tick = 0;
+
     public static void Run()
     {
         EnforceState();
-        _hookID = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(null), 0);
-        SetTimer(IntPtr.Zero, (IntPtr)1, 250, IntPtr.Zero); // re-assert state ~4x/sec
+        InstallHook();
+        SetTimer(IntPtr.Zero, (IntPtr)1, 250, IntPtr.Zero); // tick ~4x/sec
         MSG m;
         while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0)
         {
-            if (m.message == WM_TIMER) EnforceState();
+            if (m.message == WM_TIMER)
+            {
+                EnforceState();
+                // Watchdog: Windows silently removes a low-level hook if any callback ever
+                // exceeds LowLevelHooksTimeout (e.g. a GC pause). Re-install periodically so
+                // the lock always recovers instead of staying dead.
+                if ((++_tick % 8) == 0) InstallHook(); // ~every 2 seconds
+            }
         }
         UnhookWindowsHookEx(_hookID);
     }

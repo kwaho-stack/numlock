@@ -41,6 +41,10 @@ foreach ($sid in (Get-ChildItem 'Registry::HKEY_USERS' -ErrorAction SilentlyCont
     }
 }
 
+# --- 2b) Raise LowLevelHooksTimeout so Windows does not silently drop our hook ---
+# (default is 300ms; a single slow callback / GC pause can otherwise remove the hook).
+Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'LowLevelHooksTimeout' -Value 10000 -Type DWord -ErrorAction SilentlyContinue
+
 # --- 3) Install the helper and a hidden launcher ---
 $dest = Join-Path $env:LOCALAPPDATA 'KeyLock'
 if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
