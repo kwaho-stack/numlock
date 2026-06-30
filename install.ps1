@@ -16,14 +16,18 @@ if (-not $pr.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
     return
 }
 
-# --- 1) Disable CapsLock (0x3A) and NumLock (0x45) physical keys via Scancode Map ---
-# (CapsLock blocks reliably here; NumLock kept too as a bonus but the hook is its real fix.)
+# --- 1) Disable keys at the driver level via Scancode Map ---
+# CapsLock (0x3A), NumLock (0x45), ScrollLock (0x46), and the dedicated Insert key
+# (extended 0xE0 0x52). The numpad "0" key is the non-extended 0x52 and is NOT listed,
+# so it still types 0. (NumLock is kept here as a bonus; the hook is its real fix.)
 $map = [byte[]](
     0,0,0,0,
     0,0,0,0,
-    3,0,0,0,
+    5,0,0,0,
     0,0,0x3A,0,
     0,0,0x45,0,
+    0,0,0x46,0,
+    0,0,0x52,0xE0,
     0,0,0,0
 )
 Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Keyboard Layout' -Name 'Scancode Map' -Value $map -Type Binary
@@ -91,8 +95,10 @@ if (-not $running) {
 
 Write-Host ''
 Write-Host '  [OK] Installed and applied immediately (no reboot needed).' -ForegroundColor Green
-Write-Host '       - NumLock  : always ON  (key blocked by elevated hook)'
-Write-Host '       - CapsLock : always OFF (key disabled at driver level)'
+Write-Host '       - NumLock   : always ON  (numpad always types digits)'
+Write-Host '       - CapsLock  : always OFF (key disabled)'
+Write-Host '       - ScrollLock: always OFF (key disabled)'
+Write-Host '       - Insert    : disabled (numpad 0 still works)'
 Write-Host ''
 Write-Host '  Test NumLock/CapsLock in any app now.' -ForegroundColor Yellow
 Write-Host '  If something still toggles, see: %LOCALAPPDATA%\KeyLock\error.log' -ForegroundColor Yellow

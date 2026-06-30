@@ -24,6 +24,8 @@ public static class KeyLock
     const uint WM_TIMER       = 0x0113;
     const int  VK_CAPITAL     = 0x14;   // CapsLock
     const int  VK_NUMLOCK     = 0x90;   // NumLock
+    const int  VK_SCROLL      = 0x91;   // ScrollLock
+    const int  VK_INSERT      = 0x2D;   // Insert
     const uint LLKHF_EXTENDED = 0x01;
     const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
     const uint KEYEVENTF_KEYUP       = 0x0002;
@@ -92,9 +94,14 @@ public static class KeyLock
                 // Ignore our own injected events (they carry our signature).
                 if (kb.dwExtraInfo.ToInt64() != SIG)
                 {
-                    // (1) Lock: block any NumLock/CapsLock event that is not ours
-                    //     (covers real presses and ones injected by other software).
-                    if (kb.vkCode == VK_CAPITAL || kb.vkCode == VK_NUMLOCK)
+                    // (1) Lock: block any NumLock/CapsLock/ScrollLock event that is not
+                    //     ours (covers real presses and ones injected by other software).
+                    if (kb.vkCode == VK_CAPITAL || kb.vkCode == VK_NUMLOCK || kb.vkCode == VK_SCROLL)
+                        return (IntPtr)1;
+
+                    // (1b) Disable the dedicated Insert key (it is extended). The numpad
+                    //      "0" key is NOT extended, so it is left alone and still types 0.
+                    if (kb.vkCode == VK_INSERT && (kb.flags & LLKHF_EXTENDED) != 0)
                         return (IntPtr)1;
 
                     // (2) Force the numpad to ALWAYS type digits, regardless of the
@@ -128,6 +135,7 @@ public static class KeyLock
     {
         if ((GetKeyState(VK_NUMLOCK) & 1) == 0) Press((byte)VK_NUMLOCK); // turn ON if off
         if ((GetKeyState(VK_CAPITAL) & 1) == 1) Press((byte)VK_CAPITAL); // turn OFF if on
+        if ((GetKeyState(VK_SCROLL)  & 1) == 1) Press((byte)VK_SCROLL);  // turn OFF if on
     }
 
     public static void Run()
