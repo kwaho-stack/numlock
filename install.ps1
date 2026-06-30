@@ -73,7 +73,16 @@ try {
 Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
     Where-Object { $_.CommandLine -like '*KeyLock.ps1*' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-Start-ScheduledTask -TaskName 'KeyLock'
+# Launch directly (this install runs elevated, so the child is elevated too).
+Start-Process wscript.exe -ArgumentList "`"$vbs`""
+Start-Sleep -Milliseconds 1200
+$running = Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+           Where-Object { $_.CommandLine -like '*KeyLock.ps1*' }
+if (-not $running) {
+    Write-Host '  [WARN] Helper did not start via launcher; starting directly...' -ForegroundColor Yellow
+    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$ps1`""
+    Start-Sleep -Milliseconds 1200
+}
 
 Write-Host ''
 Write-Host '  [OK] Installed and applied immediately (no reboot needed).' -ForegroundColor Green

@@ -98,12 +98,22 @@ public static class KeyLock
 }
 '@
 
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+"started: $(Get-Date -Format o)`r`nPID: $PID`r`nelevated: $((New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator))" |
+    Set-Content -Path (Join-Path $logDir 'started.log')
+
 Add-Type -TypeDefinition $src -Language CSharp
+
+Write-Host '[KeyLock] Hook running. NumLock is locked ON, CapsLock locked OFF.'
+Write-Host '[KeyLock] Try pressing NumLock/CapsLock now. Close this window to stop.'
 [KeyLock]::Run()
 
 } catch {
+    $msg = $_ | Out-String
+    Write-Host "[KeyLock] ERROR: $msg" -ForegroundColor Red
     try {
         if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-        $_ | Out-String | Set-Content -Path (Join-Path $logDir 'error.log')
+        $msg | Set-Content -Path (Join-Path $logDir 'error.log')
     } catch {}
+    Start-Sleep -Seconds 30
 }
